@@ -1,0 +1,41 @@
+name: 📅 Daily Study Plan Email
+
+on:
+  schedule:
+    # 6:00 AM IST = 00:30 UTC
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub UI for testing
+
+permissions:
+  contents: read
+
+jobs:
+  send-daily-plan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout System Design repo
+        uses: actions/checkout@v4
+        with:
+          path: system-design
+
+      - name: 📥 Checkout DSA repo
+        uses: actions/checkout@v4
+        with:
+          repository: pravinshedbale1/dsa26
+          path: dsa
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📧 Send daily plan email
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SD_REPO_PATH: ./system-design
+          DSA_REPO_PATH: ./dsa
+        run: python system-design/daily_planner/send_daily_email.py
