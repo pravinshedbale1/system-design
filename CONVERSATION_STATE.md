@@ -46,8 +46,8 @@
 | **Session Count** | 0 |
 | **Systems Designed** | 0 |
 | **Building Blocks Mastered** | 0 / 30+ |
-| **Plan Start Date** | June 9, 2026 |
-| **Target Date** | September 28, 2026 |
+| **Plan Start Date** | June 10, 2026 |
+| **Target Date** | September 29, 2026 |
 | **Days Remaining** | 112 |
 
 ---
