@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
-📅 Daily Study Plan Emailer
-Sends a morning email at 6 AM IST with:
-  1. Today's DSA + System Design plan
-  2. Spaced repetition items due
-  3. Latest progress summary
-  4. Overall schedule status
+📅 Daily Study Plan Emailer (v2 — Adaptive)
 
-Runs via GitHub Actions (daily cron) or locally.
+Sends a clean morning email with:
+  1. Today's DSA plan (adaptive — based on actual progress)
+  2. Today's System Design plan (adaptive)
+  3. Yesterday's progress summary
+  4. One motivational line
+
+Runs daily at 6 AM IST via GitHub Actions.
 """
 
-import os
-import sys
-import re
-import hashlib
-import smtplib
-import logging
+import os, sys, re, hashlib, smtplib, logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, timezone
@@ -23,866 +19,670 @@ from datetime import datetime, timedelta, timezone
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)
 
-# ============================================================================
-#  CONFIGURATION
-# ============================================================================
-
 IST = timezone(timedelta(hours=5, minutes=30))
 
-SD_START = datetime(2026, 6, 10, tzinfo=IST).date()   # System Design start
-DSA_START = datetime(2026, 6, 10, tzinfo=IST).date()   # DSA start
+SD_START = datetime(2026, 6, 10, tzinfo=IST).date()
+DSA_START = datetime(2026, 6, 10, tzinfo=IST).date()
 
-SD_TOTAL_WEEKS = 16
-DSA_TOTAL_WEEKS = 17
-
-SD_CONTENT_DAYS = 5   # D1-D5 per week, D6-D7 = buffer
-DSA_CONTENT_DAYS = 7  # D1-D7 per week
-
-# Paths (overridden by env vars in GitHub Actions)
 SD_REPO = os.environ.get("SD_REPO_PATH", ".")
 DSA_REPO = os.environ.get("DSA_REPO_PATH", "./dsa")
-
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 # ============================================================================
 #  SCHEDULE DATA — SYSTEM DESIGN (16 Weeks × 5 Days)
+#  Format: (title, phase, {day: [(topic, story), ...]})
 # ============================================================================
-# Format: SD_WEEKS[week] = (title, phase_name, {day: [(topic, story), ...]})
 
 SD_WEEKS = {
-    1: ("The Internet & How Things Talk", "Phase 1 — Building Blocks", {
+    1: ("The Internet & How Things Talk", "Phase 1", {
         1: [("DNS, HTTP, TCP/IP", "A letter needs an address, a language, and a postal system"),
             ("Client-Server vs P2P", "A restaurant vs a potluck dinner")],
         2: [("REST APIs & HTTP Methods", "A waiter taking your order"),
             ("WebSockets & Long Polling", "A phone call vs checking your mailbox")],
         3: [("Load Balancers", "The hostess at a busy restaurant"),
             ("Reverse Proxies & CDNs", "Branch offices & local warehouses")],
-        4: [("🔨 Mini-Design: URL Shortener", "Your FIRST system design — simple, but teaches everything")],
-        5: [("Review + Storytelling Practice", "Tell the story of how the internet works")],
+        4: [("Mini-Design: URL Shortener", "Your first system design")],
+        5: [("Review + Storytelling Practice", "Narrate the full internet story")],
     }),
-    2: ("Data — Where Things Live & How They Scale", "Phase 1 — Building Blocks", {
+    2: ("Data — Where Things Live & Scale", "Phase 1", {
         1: [("SQL vs NoSQL", "A spreadsheet vs a filing cabinet"),
             ("ACID & BASE", "A bank transfer vs a social media like")],
-        2: [("Indexing & Query Optimization", "A library without a card catalog is useless"),
-            ("Replication", "Making photocopies of your only copy of the Constitution")],
-        3: [("Sharding / Partitioning", "Your library outgrew one building — time to open branches"),
+        2: [("Indexing & Query Optimization", "A library without a card catalog"),
+            ("Replication", "Photocopies of the Constitution")],
+        3: [("Sharding / Partitioning", "Your library outgrew one building"),
             ("CAP Theorem", "The triangle of impossible perfection")],
-        4: [("🔨 Mini-Design: Pastebin / Notes Service", "Apply all database concepts to a real system")],
-        5: [("Review + Storytelling Practice", "Tell the story of data at scale")],
+        4: [("Mini-Design: Pastebin", "Apply all database concepts")],
+        5: [("Review + Storytelling", "Tell the story of data at scale")],
     }),
-    3: ("Caching, Queues & The Art of Not Doing Work", "Phase 1 — Building Blocks", {
-        1: [("Caching Deep Dive", "Your brain doesn't go to the library every time you need a fact"),
-            ("Cache Invalidation", "The hardest problem in CS — and how we live with it")],
-        2: [("Redis & Memcached", "The difference between a Swiss Army knife and a scalpel"),
+    3: ("Caching, Queues & Not Doing Work", "Phase 1", {
+        1: [("Caching Deep Dive", "Your brain doesn't hit the library every time"),
+            ("Cache Invalidation", "The hardest problem in CS")],
+        2: [("Redis & Memcached", "Swiss Army knife vs a scalpel"),
             ("Message Queues", "A post office that never loses a letter")],
-        3: [("Event-Driven Architecture", "Instead of asking 'is it ready yet?', just tell me when it's done"),
-            ("Async Processing", "The chef doesn't serve the food — the waiter does")],
-        4: [("🔨 Mini-Design: Rate Limiter", "A system that protects other systems")],
-        5: [("Review + Storytelling Practice", "Tell the story of how caching & queues save the day")],
+        3: [("Event-Driven Architecture", "Just tell me when it's done"),
+            ("Async Processing", "The chef doesn't serve the food")],
+        4: [("Mini-Design: Rate Limiter", "A system that protects other systems")],
+        5: [("Review + Storytelling", "How caching & queues save the day")],
     }),
-    4: ("Consistency, Reliability & The Real World", "Phase 1 — Building Blocks", {
+    4: ("Consistency, Reliability & Real World", "Phase 1", {
         1: [("Consistency Models", "What does 'up to date' even mean?"),
-            ("Consensus Algorithms", "How do 5 servers agree on anything? (Spoiler: it's hard)")],
-        2: [("Availability & Fault Tolerance", "The show must go on — even when things break"),
-            ("Distributed Transactions", "Two-phase commit and why it's both essential and terrible")],
+            ("Consensus Algorithms", "How do 5 servers agree?")],
+        2: [("Availability & Fault Tolerance", "The show must go on"),
+            ("Distributed Transactions", "2PC — essential and terrible")],
         3: [("Monitoring & Observability", "You can't fix what you can't see"),
-            ("Back-of-Envelope Estimation", "The most important 5 minutes of any design interview")],
-        4: [("🔨 Design: Key-Value Store", "Your first 'real' distributed system")],
-        5: [("🎯 PHASE 1 CHECKPOINT", "Design any mini-system using all building blocks")],
+            ("Back-of-Envelope Estimation", "The most important 5 minutes")],
+        4: [("Design: Key-Value Store", "Your first distributed system")],
+        5: [("PHASE 1 CHECKPOINT", "Design any mini-system from scratch")],
     }),
-    5: ("Social & Feed Systems", "Phase 2 — The Classics", {
-        1: [("Design Twitter/X (Day 1/2)", "From a single MySQL table to a global real-time platform")],
-        2: [("Design Twitter/X (Day 2/2)", "Fan-out on write vs read, celebrity problem, timeline service")],
-        3: [("Design Instagram/Photo Sharing (Day 1/2)", "Storing, serving, and recommending a billion photos")],
-        4: [("Design Instagram/Photo Sharing (Day 2/2)", "Object storage, CDN, feed ranking, content moderation")],
-        5: [("Design a Notification System", "How to poke a billion users without drowning")],
+    5: ("Social & Feed Systems", "Phase 2", {
+        1: [("Design Twitter/X (1/2)", "From MySQL to a global platform")],
+        2: [("Design Twitter/X (2/2)", "Fan-out, celebrity problem, timeline")],
+        3: [("Design Instagram (1/2)", "A billion photos")],
+        4: [("Design Instagram (2/2)", "Object storage, CDN, feed ranking")],
+        5: [("Design Notification System", "Poke a billion users without drowning")],
     }),
-    6: ("Messaging & Real-Time Systems", "Phase 2 — The Classics", {
-        1: [("Design WhatsApp/Chat System (Day 1/2)", "From IRC to end-to-end encrypted global messaging")],
-        2: [("Design WhatsApp/Chat System (Day 2/2)", "WebSocket management, message ordering, delivery receipts")],
-        3: [("Design Slack/Discord (Day 1/2)", "Chat, but with channels, threads, search, and presence")],
-        4: [("Design Slack/Discord (Day 2/2)", "Channel architecture, real-time presence, message search")],
-        5: [("Design Live Comments/Reactions", "Millions watching the same event, all reacting at once")],
+    6: ("Messaging & Real-Time", "Phase 2", {
+        1: [("Design WhatsApp (1/2)", "End-to-end encrypted global messaging")],
+        2: [("Design WhatsApp (2/2)", "WebSockets, ordering, delivery receipts")],
+        3: [("Design Slack/Discord (1/2)", "Channels, threads, search, presence")],
+        4: [("Design Slack/Discord (2/2)", "Real-time presence, message search")],
+        5: [("Design Live Comments/Reactions", "Millions reacting at once")],
     }),
-    7: ("Storage & Search Systems", "Phase 2 — The Classics", {
-        1: [("Design Google Drive/Dropbox (Day 1/2)", "From a shared folder to planet-scale file sync")],
-        2: [("Design Google Drive/Dropbox (Day 2/2)", "File chunking, deduplication, sync conflicts")],
-        3: [("Design a Search Engine (Day 1/2)", "How do you find one page in a trillion?")],
-        4: [("Design a Search Engine (Day 2/2)", "Inverted index, crawling, ranking, sharded search")],
-        5: [("Design Typeahead/Autocomplete", "Predicting what you'll type before you type it")],
+    7: ("Storage & Search", "Phase 2", {
+        1: [("Design Google Drive (1/2)", "Planet-scale file sync")],
+        2: [("Design Google Drive (2/2)", "Chunking, dedup, sync conflicts")],
+        3: [("Design Search Engine (1/2)", "Find one page in a trillion")],
+        4: [("Design Search Engine (2/2)", "Inverted index, ranking, sharding")],
+        5: [("Design Typeahead/Autocomplete", "Predict before you type")],
     }),
-    8: ("Video & Streaming Systems", "Phase 2 — The Classics", {
-        1: [("Design YouTube (Day 1/2)", "From upload to 'Play' — the journey of a video")],
-        2: [("Design YouTube (Day 2/2)", "Upload pipeline, transcoding, adaptive bitrate, CDN")],
-        3: [("Design Netflix (Day 1/2)", "Streaming to 200M users simultaneously without buffering")],
-        4: [("Design Netflix (Day 2/2)", "Content delivery, Open Connect, personalization, A/B testing")],
-        5: [("Design Spotify / Audio Streaming", "Music that follows you everywhere")],
+    8: ("Video & Streaming", "Phase 2", {
+        1: [("Design YouTube (1/2)", "From upload to Play")],
+        2: [("Design YouTube (2/2)", "Transcoding, adaptive bitrate, CDN")],
+        3: [("Design Netflix (1/2)", "200M users without buffering")],
+        4: [("Design Netflix (2/2)", "Open Connect, personalization")],
+        5: [("Design Spotify", "Music that follows you everywhere")],
     }),
-    9: ("E-Commerce & Transactional Systems", "Phase 2 — The Classics", {
-        1: [("Design Amazon / E-Commerce (Day 1/2)", "From browsing to delivery — the commerce machine")],
-        2: [("Design Amazon / E-Commerce (Day 2/2)", "Product catalog, inventory, cart, order processing")],
-        3: [("Design a Payment System (Day 1/2)", "Moving money without losing a cent")],
-        4: [("Design a Payment System (Day 2/2)", "Idempotency, exactly-once, ledger design, fraud detection")],
-        5: [("Design a Booking System (Airbnb)", "Two people can't book the same room")],
+    9: ("E-Commerce & Transactions", "Phase 2", {
+        1: [("Design Amazon (1/2)", "From browsing to delivery")],
+        2: [("Design Amazon (2/2)", "Catalog, inventory, orders")],
+        3: [("Design Payment System (1/2)", "Moving money without losing a cent")],
+        4: [("Design Payment System (2/2)", "Idempotency, ledger, fraud")],
+        5: [("Design Booking System", "Two people can't book the same room")],
     }),
-    10: ("Location & Ride-Sharing Systems", "Phase 2 — The Classics", {
-        1: [("Design Uber/Lyft (Day 1/2)", "Matching riders to drivers in a moving world")],
-        2: [("Design Uber/Lyft (Day 2/2)", "Geo-spatial indexing, real-time location, matching, surge pricing")],
-        3: [("Design Google Maps (Day 1/2)", "Routing billions of trips across the planet")],
-        4: [("Design Google Maps (Day 2/2)", "Graph storage, Dijkstra/A* at scale, live traffic, map tiles")],
-        5: [("🎯 PHASE 2 CHECKPOINT", "Full timed mock: design an unseen system")],
+    10: ("Location & Ride-Sharing", "Phase 2", {
+        1: [("Design Uber/Lyft (1/2)", "Matching in a moving world")],
+        2: [("Design Uber/Lyft (2/2)", "Geohash, real-time location, surge")],
+        3: [("Design Google Maps (1/2)", "Routing billions of trips")],
+        4: [("Design Google Maps (2/2)", "Dijkstra at scale, live traffic")],
+        5: [("PHASE 2 CHECKPOINT", "Full timed mock on unseen system")],
     }),
-    11: ("Infrastructure & Platform Systems", "Phase 3 — Deep Cuts", {
-        1: [("Distributed Task Scheduler (Day 1/2)", "Running a billion jobs without missing one")],
-        2: [("Distributed Task Scheduler (Day 2/2)", "Job distribution, failure recovery, exactly-once execution")],
-        3: [("Distributed Cache / Redis Cluster (Day 1/2)", "Every millisecond of latency = $ lost")],
-        4: [("Distributed Cache / Redis Cluster (Day 2/2)", "Consistent hashing, replication, eviction, hot keys")],
-        5: [("Design Metrics/Monitoring System", "Watching the watchers")],
+    11: ("Infrastructure & Platform", "Phase 3", {
+        1: [("Distributed Task Scheduler (1/2)", "A billion jobs without missing one")],
+        2: [("Distributed Task Scheduler (2/2)", "Failure recovery, exactly-once")],
+        3: [("Distributed Cache (1/2)", "Every ms of latency = $ lost")],
+        4: [("Distributed Cache (2/2)", "Consistent hashing, eviction, hot keys")],
+        5: [("Metrics/Monitoring System", "Watching the watchers")],
     }),
-    12: ("Data Pipeline & Analytics Systems", "Phase 3 — Deep Cuts", {
-        1: [("Design a Web Crawler (Day 1/2)", "How Google reads the entire internet")],
-        2: [("Design a Web Crawler (Day 2/2)", "Politeness, URL frontier, deduplication, distributed crawling")],
-        3: [("Design Data Analytics Pipeline (Day 1/2)", "From raw events to business insights")],
-        4: [("Design Data Analytics Pipeline (Day 2/2)", "Event ingestion, stream processing, Lambda/Kappa")],
-        5: [("Design Distributed Logging System", "Finding a needle in a haystack of logs")],
+    12: ("Data Pipeline & Analytics", "Phase 3", {
+        1: [("Web Crawler (1/2)", "How Google reads the internet")],
+        2: [("Web Crawler (2/2)", "URL frontier, dedup, politeness")],
+        3: [("Analytics Pipeline (1/2)", "Raw events to insights")],
+        4: [("Analytics Pipeline (2/2)", "Stream processing, Lambda/Kappa")],
+        5: [("Distributed Logging", "Needle in a haystack of logs")],
     }),
-    13: ("Unique/Tricky Systems", "Phase 3 — Deep Cuts", {
-        1: [("Design Ticket Booking System (Day 1/2)", "10,000 people want the same 100 seats")],
-        2: [("Design Ticket Booking System (Day 2/2)", "Virtual waiting room, seat locking, extreme contention")],
-        3: [("Design Collaborative Editor (Day 1/2)", "50 people editing the same paragraph")],
-        4: [("Design Collaborative Editor (Day 2/2)", "OT vs CRDT, operational transforms, conflict resolution")],
-        5: [("Design URL Shortener at Billion Scale", "Revisiting your first design — but now you're dangerous")],
+    13: ("Unique/Tricky Systems", "Phase 3", {
+        1: [("Ticket Booking (1/2)", "10K people want 100 seats")],
+        2: [("Ticket Booking (2/2)", "Waiting room, seat locking")],
+        3: [("Collaborative Editor (1/2)", "50 people, one paragraph")],
+        4: [("Collaborative Editor (2/2)", "OT vs CRDT, conflict resolution")],
+        5: [("URL Shortener at Billion Scale", "Revisit — now you're dangerous")],
     }),
-    14: ("Security, Auth & API Systems", "Phase 3 — Deep Cuts", {
-        1: [("Design Authentication System (Day 1/2)", "Who are you, and how do I know you're not lying?")],
-        2: [("Design Authentication System (Day 2/2)", "JWT, OAuth2, session management, MFA, token refresh")],
-        3: [("Design an API Gateway (Day 1/2)", "The front door to your entire platform")],
-        4: [("Design an API Gateway (Day 2/2)", "Rate limiting, auth, routing, circuit breaking")],
-        5: [("Design Content Moderation System", "Keeping the internet safe at scale")],
+    14: ("Security, Auth & APIs", "Phase 3", {
+        1: [("Auth System (1/2)", "Who are you?")],
+        2: [("Auth System (2/2)", "JWT, OAuth2, MFA")],
+        3: [("API Gateway (1/2)", "Front door to your platform")],
+        4: [("API Gateway (2/2)", "Rate limiting, circuit breaking")],
+        5: [("Content Moderation", "Keeping the internet safe")],
     }),
-    15: ("Mock Interview Marathon", "Phase 3 — Deep Cuts", {
-        1: [("Mock 1: Unseen system", "45 min timed, full interview simulation")],
-        2: [("Mock 2: Weak areas focus", "Focus on areas identified in state file")],
-        3: [("Mock 3: Curveball system", "Something unusual — multiplayer game server, voting system")],
-        4: [("Mock 4: Company-specific style", "Google: scale, Meta: social, Amazon: customer")],
-        5: [("Mock 5: Speed round", "Design 2 systems in 60 minutes (high-level only)")],
+    15: ("Mock Interview Marathon", "Phase 3", {
+        1: [("Mock 1", "Unseen system, 45 min timed")],
+        2: [("Mock 2", "Weak areas focus")],
+        3: [("Mock 3", "Curveball system")],
+        4: [("Mock 4", "Company-specific style")],
+        5: [("Mock 5", "Speed round — 2 systems in 60 min")],
     }),
-    16: ("Final Polish & Interview Readiness", "Phase 3 — Deep Cuts", {
-        1: [("Story Compilation", "Write the 2-minute story for every system designed")],
-        2: [("Building Block Review", "Walk through every building block from memory")],
-        3: [("Tradeoff Drill", "'Why did you choose X over Y?' for 20 key decisions")],
-        4: [("Full Simulation", "2 back-to-back system design interviews (45 min each)")],
-        5: [("Light Review + Rest", "Read stories, rest, build confidence")],
+    16: ("Final Polish", "Phase 3", {
+        1: [("Story Compilation", "2-min story for every system")],
+        2: [("Building Block Review", "Every block from memory")],
+        3: [("Tradeoff Drill", "Why X over Y? × 20 decisions")],
+        4: [("Full Simulation", "2 back-to-back interviews")],
+        5: [("Light Review + Rest", "Read stories, build confidence")],
     }),
 }
 
 # ============================================================================
 #  SCHEDULE DATA — DSA (17 Weeks × 7 Days)
+#  Format: (title, phase, {day: [(name, diff, pattern), ...] or "string"})
 # ============================================================================
-# Format: DSA_WEEKS[week] = (title, phase_name, {day: [(name, difficulty, pattern), ...]})
-# Special days: use string instead of list for review/challenge days
 
 DSA_WEEKS = {
-    1: ("Arrays & Hashing", "Phase 1 — Foundation", {
-        1: [("Two Sum (LC #1)", "Easy", "HashMap complement"),
-            ("Contains Duplicate (LC #217)", "Easy", "HashSet membership")],
-        2: [("Valid Anagram (LC #242)", "Easy", "Frequency array int[26]"),
-            ("Two Sum II (LC #167)", "Medium", "Two pointers on sorted")],
-        3: [("Group Anagrams (LC #49)", "Medium", "HashMap grouping"),
-            ("Top K Frequent Elements (LC #347)", "Medium", "Freq count + Bucket sort")],
-        4: [("Product of Array Except Self (LC #238)", "Medium", "Prefix/Suffix product"),
-            ("Longest Consecutive Sequence (LC #128)", "Medium", "HashSet + sequence start")],
-        5: [("Encode and Decode Strings (LC #271)", "Medium", "Length-prefix delimiter"),
-            ("Valid Sudoku (LC #36)", "Medium", "HashSet per row/col/box")],
-        6: [("Subarray Sum Equals K (LC #560)", "Medium", "Prefix sum + HashMap"),
-            ("📖 Review + weak problem re-solve", "", "")],
-        7: "🔥 Weekly Challenge: Solve 2 unseen problems using only W1 patterns",
+    1: ("Arrays & Hashing", "Phase 1", {
+        1: [("Two Sum (#1)", "Easy", "HashMap complement"), ("Contains Duplicate (#217)", "Easy", "HashSet")],
+        2: [("Valid Anagram (#242)", "Easy", "Frequency int[26]"), ("Two Sum II (#167)", "Med", "Two pointers sorted")],
+        3: [("Group Anagrams (#49)", "Med", "HashMap grouping"), ("Top K Frequent (#347)", "Med", "Bucket sort")],
+        4: [("Product Except Self (#238)", "Med", "Prefix/Suffix"), ("Longest Consecutive (#128)", "Med", "HashSet sequence")],
+        5: [("Encode/Decode Strings (#271)", "Med", "Length-prefix"), ("Valid Sudoku (#36)", "Med", "HashSet per row/col/box")],
+        6: [("Subarray Sum = K (#560)", "Med", "Prefix sum + HashMap")],
+        7: "Weekly Challenge: 2 unseen problems",
     }),
-    2: ("Two Pointers & Sorting", "Phase 1 — Foundation", {
-        1: [("Valid Palindrome (LC #125)", "Easy", "Two pointers inward"),
-            ("Two Sum II (LC #167)", "Medium", "Sorted + two pointers")],
-        2: [("3Sum (LC #15)", "Medium", "Sort + fix one + two pointers"),
-            ("Container With Most Water (LC #11)", "Medium", "Greedy two pointers")],
-        3: [("Trapping Rain Water (LC #42)", "Hard", "Two pointers / prefix max"),
-            ("Move Zeroes (LC #283)", "Easy", "Partition / write pointer")],
-        4: [("Sort Colors (LC #75)", "Medium", "Dutch National Flag"),
-            ("Remove Duplicates from Sorted Array (LC #26)", "Easy", "Slow/fast write pointer")],
-        5: [("4Sum (LC #18)", "Medium", "Sort + fix two + two pointers"),
-            ("Boats to Save People (LC #881)", "Medium", "Sort + greedy two pointers")],
-        6: "📖 Review + re-solve W1-W2 struggles",
-        7: "🔥 Weekly Challenge: 2 unseen two-pointer problems",
+    2: ("Two Pointers & Sorting", "Phase 1", {
+        1: [("Valid Palindrome (#125)", "Easy", "Two pointers inward"), ("Two Sum II (#167)", "Med", "Two pointers sorted")],
+        2: [("3Sum (#15)", "Med", "Sort + fix + 2ptr"), ("Container With Most Water (#11)", "Med", "Greedy 2ptr")],
+        3: [("Trapping Rain Water (#42)", "Hard", "Two pointers / prefix max"), ("Move Zeroes (#283)", "Easy", "Write pointer")],
+        4: [("Sort Colors (#75)", "Med", "Dutch National Flag"), ("Remove Duplicates (#26)", "Easy", "Slow/fast pointer")],
+        5: [("4Sum (#18)", "Med", "Sort + fix two + 2ptr"), ("Boats to Save People (#881)", "Med", "Greedy 2ptr")],
+        6: "Review + re-solve struggles",
+        7: "Weekly Challenge: 2 unseen problems",
     }),
-    3: ("Sliding Window", "Phase 1 — Foundation", {
-        1: [("Maximum Sum Subarray of Size K", "Easy", "Fixed window"),
-            ("Longest Substring Without Repeating (LC #3)", "Medium", "Variable window + HashSet")],
-        2: [("Minimum Size Subarray Sum (LC #209)", "Medium", "Variable window shrink"),
-            ("Permutation in String (LC #567)", "Medium", "Fixed window + freq match")],
-        3: [("Minimum Window Substring (LC #76)", "Hard", "Variable window + freq"),
-            ("Longest Repeating Char Replacement (LC #424)", "Medium", "Variable window + max freq")],
-        4: [("Fruit Into Baskets (LC #904)", "Medium", "At most K distinct"),
-            ("Max Consecutive Ones III (LC #1004)", "Medium", "Variable window — at most K zeros")],
-        5: [("Subarrays with K Different Integers (LC #992)", "Hard", "AtMost(K) - AtMost(K-1)"),
-            ("Sliding Window Maximum (LC #239)", "Hard", "Monotonic deque")],
-        6: "📖 Review + W1-W2 spaced repetition",
-        7: "🔥 Weekly Challenge: 2 unseen sliding window problems",
+    3: ("Sliding Window", "Phase 1", {
+        1: [("Max Sum Subarray Size K", "Easy", "Fixed window"), ("Longest Substring No Repeat (#3)", "Med", "Variable + HashSet")],
+        2: [("Min Size Subarray Sum (#209)", "Med", "Variable shrink"), ("Permutation in String (#567)", "Med", "Fixed + freq match")],
+        3: [("Min Window Substring (#76)", "Hard", "Variable + freq"), ("Longest Repeating Char Replace (#424)", "Med", "Variable + max freq")],
+        4: [("Fruit Into Baskets (#904)", "Med", "At most K distinct"), ("Max Consecutive Ones III (#1004)", "Med", "At most K zeros")],
+        5: [("Subarrays K Different (#992)", "Hard", "AtMost(K)-AtMost(K-1)"), ("Sliding Window Max (#239)", "Hard", "Monotonic deque")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge: 2 unseen problems",
     }),
-    4: ("Stack & Queue", "Phase 1 — Foundation", {
-        1: [("Valid Parentheses (LC #20)", "Easy", "Stack for matching"),
-            ("Min Stack (LC #155)", "Medium", "Auxiliary stack for min")],
-        2: [("Evaluate Reverse Polish Notation (LC #150)", "Medium", "Stack for expression eval"),
-            ("Daily Temperatures (LC #739)", "Medium", "Monotonic decreasing stack")],
-        3: [("Next Greater Element I (LC #496)", "Easy", "Monotonic stack + HashMap"),
-            ("Largest Rectangle in Histogram (LC #84)", "Hard", "Monotonic increasing stack")],
-        4: [("Car Fleet (LC #853)", "Medium", "Stack + sorting"),
-            ("Implement Queue using Stacks (LC #232)", "Easy", "Two stacks")],
-        5: [("Asteroid Collision (LC #735)", "Medium", "Stack simulation"),
-            ("Maximal Rectangle (LC #85)", "Hard", "Histogram per row + monotonic stack")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    4: ("Stack & Queue", "Phase 1", {
+        1: [("Valid Parentheses (#20)", "Easy", "Stack matching"), ("Min Stack (#155)", "Med", "Auxiliary stack")],
+        2: [("Evaluate RPN (#150)", "Med", "Stack eval"), ("Daily Temperatures (#739)", "Med", "Monotonic stack")],
+        3: [("Next Greater Element (#496)", "Easy", "Monotonic + HashMap"), ("Largest Rectangle Histogram (#84)", "Hard", "Monotonic stack")],
+        4: [("Car Fleet (#853)", "Med", "Stack + sorting"), ("Queue using Stacks (#232)", "Easy", "Two stacks")],
+        5: [("Asteroid Collision (#735)", "Med", "Stack simulation"), ("Maximal Rectangle (#85)", "Hard", "Histogram + stack")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    5: ("Linked List", "Phase 1 — Foundation", {
-        1: [("Reverse Linked List (LC #206)", "Easy", "Iterative 3-pointer"),
-            ("Merge Two Sorted Lists (LC #21)", "Easy", "Dummy node + merge")],
-        2: [("Linked List Cycle (LC #141)", "Easy", "Fast/slow pointers (Floyd's)"),
-            ("Linked List Cycle II (LC #142)", "Medium", "Floyd's + phase 2")],
-        3: [("Remove Nth Node From End (LC #19)", "Medium", "Two pointers with gap"),
-            ("Reorder List (LC #143)", "Medium", "Find mid + reverse + merge")],
-        4: [("Merge K Sorted Lists (LC #23)", "Hard", "Min-heap / divide & conquer"),
-            ("Copy List with Random Pointer (LC #138)", "Medium", "HashMap clone / interleave")],
-        5: [("LRU Cache (LC #146)", "Medium", "HashMap + Doubly Linked List"),
-            ("Add Two Numbers (LC #2)", "Medium", "Carry arithmetic")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    5: ("Linked List", "Phase 1", {
+        1: [("Reverse Linked List (#206)", "Easy", "3-pointer"), ("Merge Two Sorted (#21)", "Easy", "Dummy node")],
+        2: [("Linked List Cycle (#141)", "Easy", "Floyd's"), ("Cycle II (#142)", "Med", "Floyd's phase 2")],
+        3: [("Remove Nth From End (#19)", "Med", "Gap pointers"), ("Reorder List (#143)", "Med", "Mid+reverse+merge")],
+        4: [("Merge K Sorted (#23)", "Hard", "Min-heap"), ("Copy Random Pointer (#138)", "Med", "HashMap clone")],
+        5: [("LRU Cache (#146)", "Med", "HashMap + DLL"), ("Add Two Numbers (#2)", "Med", "Carry arithmetic")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    6: ("Binary Search", "Phase 1 — Foundation", {
-        1: [("Binary Search (LC #704)", "Easy", "Classic template: lo, hi, mid"),
-            ("Search Insert Position (LC #35)", "Easy", "Lower bound")],
-        2: [("Search in Rotated Sorted Array (LC #33)", "Medium", "Modified binary search"),
-            ("Find Min in Rotated Sorted (LC #153)", "Medium", "Binary search for pivot")],
-        3: [("Koko Eating Bananas (LC #875)", "Medium", "Binary search on answer"),
-            ("Search a 2D Matrix (LC #74)", "Medium", "Flatten to 1D binary search")],
-        4: [("Time Based Key-Value Store (LC #981)", "Medium", "Binary search on timestamps"),
-            ("Find Peak Element (LC #162)", "Medium", "Binary search on unsorted")],
-        5: [("Median of Two Sorted Arrays (LC #4)", "Hard", "Binary search on partition"),
-            ("Split Array Largest Sum (LC #410)", "Hard", "Binary search on answer")],
-        6: "🎯 PHASE 1 CHECKPOINT: Solve 5 mixed unseen problems (timed)",
-        7: "📖 Review all Phase 1 patterns + update confidence",
+    6: ("Binary Search", "Phase 1", {
+        1: [("Binary Search (#704)", "Easy", "Classic lo/hi/mid"), ("Search Insert (#35)", "Easy", "Lower bound")],
+        2: [("Search Rotated (#33)", "Med", "Modified BS"), ("Find Min Rotated (#153)", "Med", "BS for pivot")],
+        3: [("Koko Eating Bananas (#875)", "Med", "BS on answer"), ("Search 2D Matrix (#74)", "Med", "Flatten to 1D")],
+        4: [("Time Based KV Store (#981)", "Med", "BS on timestamps"), ("Find Peak (#162)", "Med", "BS on unsorted")],
+        5: [("Median Two Sorted (#4)", "Hard", "BS on partition"), ("Split Array Largest (#410)", "Hard", "BS on answer")],
+        6: "PHASE 1 CHECKPOINT: 5 mixed timed problems",
+        7: "Review all Phase 1 patterns",
     }),
-    7: ("Binary Trees — DFS", "Phase 2 — Advanced Patterns", {
-        1: [("Invert Binary Tree (LC #226)", "Easy", "Recursive DFS"),
-            ("Maximum Depth (LC #104)", "Easy", "Recursive DFS")],
-        2: [("Same Tree (LC #100)", "Easy", "Compare trees recursively"),
-            ("Subtree of Another Tree (LC #572)", "Medium", "Compare trees recursively")],
-        3: [("Diameter of Binary Tree (LC #543)", "Easy", "Height + diameter relationship"),
-            ("Balanced Binary Tree (LC #110)", "Easy", "Height-based DFS")],
-        4: [("Lowest Common Ancestor (LC #236)", "Medium", "Recursive LCA"),
-            ("Path Sum (LC #112)", "Easy", "Root-to-leaf DFS")],
-        5: [("Binary Tree Max Path Sum (LC #124)", "Hard", "Global max with DFS"),
-            ("Count Good Nodes (LC #1448)", "Medium", "DFS with max tracking")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    7: ("Trees — DFS", "Phase 2", {
+        1: [("Invert Tree (#226)", "Easy", "Recursive DFS"), ("Max Depth (#104)", "Easy", "DFS")],
+        2: [("Same Tree (#100)", "Easy", "Compare recursively"), ("Subtree (#572)", "Med", "Compare trees")],
+        3: [("Diameter (#543)", "Easy", "Height+diameter"), ("Balanced Tree (#110)", "Easy", "Height DFS")],
+        4: [("LCA (#236)", "Med", "Recursive LCA"), ("Path Sum (#112)", "Easy", "Root-to-leaf")],
+        5: [("Max Path Sum (#124)", "Hard", "Global max DFS"), ("Good Nodes (#1448)", "Med", "DFS+max tracking")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    8: ("Binary Trees — BFS + BST", "Phase 2 — Advanced Patterns", {
-        1: [("Level Order Traversal (LC #102)", "Medium", "BFS with queue"),
-            ("Right Side View (LC #199)", "Medium", "BFS — last node per level")],
-        2: [("Zigzag Level Order (LC #103)", "Medium", "BFS with direction flag"),
-            ("Average of Levels (LC #637)", "Easy", "BFS + average")],
-        3: [("Validate BST (LC #98)", "Medium", "Inorder = sorted"),
-            ("Kth Smallest in BST (LC #230)", "Medium", "Inorder traversal")],
-        4: [("Serialize/Deserialize BT (LC #297)", "Hard", "Tree serialization"),
-            ("Construct BT from Preorder+Inorder (LC #105)", "Medium", "Divide & conquer")],
-        5: [("BST Iterator (LC #173)", "Medium", "Controlled inorder"),
-            ("LCA of BST (LC #235)", "Medium", "BST property")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    8: ("Trees — BFS + BST", "Phase 2", {
+        1: [("Level Order (#102)", "Med", "BFS queue"), ("Right Side View (#199)", "Med", "BFS last per level")],
+        2: [("Zigzag Level (#103)", "Med", "BFS + direction"), ("Avg of Levels (#637)", "Easy", "BFS average")],
+        3: [("Validate BST (#98)", "Med", "Inorder = sorted"), ("Kth Smallest BST (#230)", "Med", "Inorder")],
+        4: [("Serialize BT (#297)", "Hard", "Serialization"), ("Construct BT (#105)", "Med", "Divide & conquer")],
+        5: [("BST Iterator (#173)", "Med", "Controlled inorder"), ("LCA of BST (#235)", "Med", "BST property")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    9: ("Heap / Priority Queue", "Phase 2 — Advanced Patterns", {
-        1: [("Kth Largest Element (LC #215)", "Medium", "Max heap / QuickSelect"),
-            ("Last Stone Weight (LC #1046)", "Easy", "Max heap")],
-        2: [("K Closest Points (LC #973)", "Medium", "Min-heap of size K"),
-            ("Top K Frequent (LC #347 revisit)", "Medium", "Heap vs Bucket sort")],
-        3: [("Find Median from Data Stream (LC #295)", "Hard", "Two-heap pattern")],
-        4: [("Merge K Sorted Lists (LC #23 revisit)", "Hard", "K-way merge with heap"),
-            ("Task Scheduler (LC #621)", "Medium", "Greedy + heap")],
-        5: [("Reorganize String (LC #767)", "Medium", "Greedy with heap"),
-            ("K Closest in Sorted Array (LC #658)", "Medium", "Binary search + two pointers")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    9: ("Heap / Priority Queue", "Phase 2", {
+        1: [("Kth Largest (#215)", "Med", "Heap/QuickSelect"), ("Last Stone Weight (#1046)", "Easy", "Max heap")],
+        2: [("K Closest Points (#973)", "Med", "Min-heap size K"), ("Top K Frequent revisit (#347)", "Med", "Heap vs Bucket")],
+        3: [("Find Median Stream (#295)", "Hard", "Two-heap")],
+        4: [("Merge K Sorted revisit (#23)", "Hard", "K-way merge"), ("Task Scheduler (#621)", "Med", "Greedy+heap")],
+        5: [("Reorganize String (#767)", "Med", "Greedy heap"), ("K Closest Sorted (#658)", "Med", "BS + 2ptr")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    10: ("Backtracking", "Phase 2 — Advanced Patterns", {
-        1: [("Subsets (LC #78)", "Medium", "Include/exclude"),
-            ("Subsets II (LC #90)", "Medium", "Skip duplicates")],
-        2: [("Permutations (LC #46)", "Medium", "Swap-based"),
-            ("Permutations II (LC #47)", "Medium", "used[] array")],
-        3: [("Combination Sum (LC #39)", "Medium", "Unbounded combinations"),
-            ("Combination Sum II (LC #40)", "Medium", "Bounded + skip duplicates")],
-        4: [("Word Search (LC #79)", "Medium", "Grid backtracking"),
-            ("Palindrome Partitioning (LC #131)", "Medium", "String partition")],
-        5: [("N-Queens (LC #51)", "Hard", "Constraint satisfaction"),
-            ("Sudoku Solver (LC #37)", "Hard", "Constraint satisfaction")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    10: ("Backtracking", "Phase 2", {
+        1: [("Subsets (#78)", "Med", "Include/exclude"), ("Subsets II (#90)", "Med", "Skip duplicates")],
+        2: [("Permutations (#46)", "Med", "Swap-based"), ("Permutations II (#47)", "Med", "used[] array")],
+        3: [("Combination Sum (#39)", "Med", "Unbounded"), ("Combination Sum II (#40)", "Med", "Bounded+dedup")],
+        4: [("Word Search (#79)", "Med", "Grid backtrack"), ("Palindrome Partition (#131)", "Med", "String partition")],
+        5: [("N-Queens (#51)", "Hard", "Constraint satisfaction"), ("Sudoku Solver (#37)", "Hard", "Constraint")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    11: ("Graphs — BFS/DFS", "Phase 2 — Advanced Patterns", {
-        1: [("Number of Islands (LC #200)", "Medium", "Grid DFS"),
-            ("Clone Graph (LC #133)", "Medium", "Graph DFS + clone")],
-        2: [("Pacific Atlantic Water Flow (LC #417)", "Medium", "Multi-source BFS/DFS"),
-            ("Surrounded Regions (LC #130)", "Medium", "Border DFS")],
-        3: [("Course Schedule (LC #207)", "Medium", "Topological sort (Kahn's)"),
-            ("Course Schedule II (LC #210)", "Medium", "Topological sort (DFS)")],
-        4: [("Word Ladder (LC #127)", "Hard", "BFS shortest path"),
-            ("Rotting Oranges (LC #994)", "Medium", "Multi-source BFS")],
-        5: [("Accounts Merge (LC #721)", "Medium", "Union-Find"),
-            ("Graph Valid Tree (LC #261)", "Medium", "Union-Find / DFS")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    11: ("Graphs — BFS/DFS", "Phase 2", {
+        1: [("Number of Islands (#200)", "Med", "Grid DFS"), ("Clone Graph (#133)", "Med", "DFS+clone")],
+        2: [("Pacific Atlantic (#417)", "Med", "Multi-source DFS"), ("Surrounded Regions (#130)", "Med", "Border DFS")],
+        3: [("Course Schedule (#207)", "Med", "Topo sort Kahn's"), ("Course Schedule II (#210)", "Med", "Topo sort DFS")],
+        4: [("Word Ladder (#127)", "Hard", "BFS shortest"), ("Rotting Oranges (#994)", "Med", "Multi-source BFS")],
+        5: [("Accounts Merge (#721)", "Med", "Union-Find"), ("Graph Valid Tree (#261)", "Med", "Union-Find/DFS")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    12: ("Advanced Graphs + Union-Find", "Phase 2 — Advanced Patterns", {
-        1: [("Network Delay Time (LC #743)", "Medium", "Dijkstra"),
-            ("Cheapest Flights (LC #787)", "Medium", "Bellman-Ford")],
-        2: [("Swim in Rising Water (LC #778)", "Hard", "Binary search + BFS"),
-            ("Path with Min Effort (LC #1631)", "Medium", "Dijkstra variant")],
-        3: [("Redundant Connection (LC #684)", "Medium", "Union-Find"),
-            ("Min Cost to Connect (LC #1135)", "Medium", "MST / Kruskal")],
-        4: [("Alien Dictionary (LC #269)", "Hard", "Topo sort on chars"),
-            ("Longest Increasing Path (LC #329)", "Hard", "DFS + memoization")],
-        5: [("Critical Connections (LC #1192)", "Hard", "Tarjan's (bridges)")],
-        6: "🎯 PHASE 2 CHECKPOINT: Solve 5 mixed tree/graph/heap problems (timed)",
-        7: "📖 Full review of Phase 1 + 2 patterns",
+    12: ("Advanced Graphs", "Phase 2", {
+        1: [("Network Delay (#743)", "Med", "Dijkstra"), ("Cheapest Flights (#787)", "Med", "Bellman-Ford")],
+        2: [("Swim in Rising Water (#778)", "Hard", "BS+BFS"), ("Path Min Effort (#1631)", "Med", "Dijkstra variant")],
+        3: [("Redundant Connection (#684)", "Med", "Union-Find"), ("Min Cost Connect (#1135)", "Med", "MST Kruskal")],
+        4: [("Alien Dictionary (#269)", "Hard", "Topo sort chars"), ("Longest Increasing Path (#329)", "Hard", "DFS+memo")],
+        5: [("Critical Connections (#1192)", "Hard", "Tarjan's bridges")],
+        6: "PHASE 2 CHECKPOINT: 5 mixed timed problems",
+        7: "Review Phase 1+2 patterns",
     }),
-    13: ("Dynamic Programming — 1D", "Phase 3 — DP & Hard Patterns", {
-        1: [("Climbing Stairs (LC #70)", "Easy", "Fibonacci-style DP"),
-            ("House Robber (LC #198)", "Medium", "Linear DP")],
-        2: [("House Robber II (LC #213)", "Medium", "Circular DP"),
-            ("Decode Ways (LC #91)", "Medium", "Counting DP")],
-        3: [("Coin Change (LC #322)", "Medium", "Min coins — unbounded"),
-            ("Coin Change 2 (LC #518)", "Medium", "Count ways — unbounded")],
-        4: [("Longest Increasing Subsequence (LC #300)", "Medium", "LIS pattern"),
-            ("Word Break (LC #139)", "Medium", "Substring DP")],
-        5: [("Maximum Product Subarray (LC #152)", "Medium", "Track min/max"),
-            ("Partition Equal Subset Sum (LC #416)", "Medium", "0/1 knapsack")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    13: ("DP — 1D", "Phase 3", {
+        1: [("Climbing Stairs (#70)", "Easy", "Fibonacci DP"), ("House Robber (#198)", "Med", "Linear DP")],
+        2: [("House Robber II (#213)", "Med", "Circular DP"), ("Decode Ways (#91)", "Med", "Counting DP")],
+        3: [("Coin Change (#322)", "Med", "Min unbounded"), ("Coin Change 2 (#518)", "Med", "Count ways")],
+        4: [("LIS (#300)", "Med", "LIS pattern"), ("Word Break (#139)", "Med", "Substring DP")],
+        5: [("Max Product Subarray (#152)", "Med", "Track min/max"), ("Partition Equal Subset (#416)", "Med", "0/1 knapsack")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    14: ("Dynamic Programming — 2D & Strings", "Phase 3 — DP & Hard Patterns", {
-        1: [("Unique Paths (LC #62)", "Medium", "Grid DP"),
-            ("Minimum Path Sum (LC #64)", "Medium", "Grid DP")],
-        2: [("Longest Common Subsequence (LC #1143)", "Medium", "Two-string DP"),
-            ("Edit Distance (LC #72)", "Hard", "Two-string DP")],
-        3: [("Longest Palindromic Substring (LC #5)", "Medium", "Expand around center / DP"),
-            ("Palindromic Substrings (LC #647)", "Medium", "Expand around center")],
-        4: [("Interleaving String (LC #97)", "Hard", "Two-string DP advanced"),
-            ("Distinct Subsequences (LC #115)", "Hard", "Two-string DP")],
-        5: [("Burst Balloons (LC #312)", "Hard", "Interval DP"),
-            ("Regular Expression Matching (LC #10)", "Hard", "String matching DP")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    14: ("DP — 2D & Strings", "Phase 3", {
+        1: [("Unique Paths (#62)", "Med", "Grid DP"), ("Min Path Sum (#64)", "Med", "Grid DP")],
+        2: [("LCS (#1143)", "Med", "Two-string DP"), ("Edit Distance (#72)", "Hard", "Two-string DP")],
+        3: [("Longest Palindromic Sub (#5)", "Med", "Expand center"), ("Palindromic Substrings (#647)", "Med", "Expand center")],
+        4: [("Interleaving String (#97)", "Hard", "2-string adv"), ("Distinct Subsequences (#115)", "Hard", "2-string DP")],
+        5: [("Burst Balloons (#312)", "Hard", "Interval DP"), ("Regex Matching (#10)", "Hard", "String match DP")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    15: ("Tries, Intervals & Greedy", "Phase 3 — DP & Hard Patterns", {
-        1: [("Implement Trie (LC #208)", "Medium", "Trie implementation"),
-            ("Word Search II (LC #212)", "Hard", "Trie + DFS")],
-        2: [("Design Add/Search Words (LC #211)", "Medium", "Trie with wildcards"),
-            ("Longest Word in Dict (LC #720)", "Medium", "Trie + BFS")],
-        3: [("Merge Intervals (LC #56)", "Medium", "Sort + merge"),
-            ("Insert Interval (LC #57)", "Medium", "Interval insertion")],
-        4: [("Non-overlapping Intervals (LC #435)", "Medium", "Greedy interval"),
-            ("Meeting Rooms II (LC #253)", "Medium", "Sweep line")],
-        5: [("Jump Game (LC #55)", "Medium", "Greedy"),
-            ("Jump Game II (LC #45)", "Medium", "Greedy BFS"),
-            ("Gas Station (LC #134)", "Medium", "Greedy proof")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    15: ("Tries, Intervals & Greedy", "Phase 3", {
+        1: [("Implement Trie (#208)", "Med", "Trie"), ("Word Search II (#212)", "Hard", "Trie+DFS")],
+        2: [("Add/Search Words (#211)", "Med", "Trie wildcards"), ("Longest Word Dict (#720)", "Med", "Trie+BFS")],
+        3: [("Merge Intervals (#56)", "Med", "Sort+merge"), ("Insert Interval (#57)", "Med", "Interval insert")],
+        4: [("Non-overlapping (#435)", "Med", "Greedy interval"), ("Meeting Rooms II (#253)", "Med", "Sweep line")],
+        5: [("Jump Game (#55)", "Med", "Greedy"), ("Jump Game II (#45)", "Med", "Greedy BFS"), ("Gas Station (#134)", "Med", "Greedy")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    16: ("Advanced Mixed Problems", "Phase 3 — DP & Hard Patterns", {
-        1: [("LFU Cache (LC #460)", "Hard", "Complex data structure"),
-            ("LRU Cache (LC #146 revisit)", "Medium", "HashMap + DLL")],
-        2: [("Skyline Problem (LC #218)", "Hard", "Sweep line + heap"),
-            ("Trapping Rain Water (LC #42 revisit)", "Hard", "Two pointers")],
-        3: [("Word Ladder II (LC #126)", "Hard", "BFS + backtrack"),
-            ("Longest Valid Parentheses (LC #32)", "Hard", "Stack / DP")],
-        4: [("Maximal Rectangle (LC #85)", "Hard", "Histogram + stack"),
-            ("Largest Rectangle (LC #84 revisit)", "Hard", "Monotonic stack")],
-        5: [("Company-tagged hard problems", "Hard", "Mixed patterns — 2-3 problems")],
-        6: "📖 Review + spaced repetition",
-        7: "🔥 Weekly Challenge",
+    16: ("Advanced Mixed", "Phase 3", {
+        1: [("LFU Cache (#460)", "Hard", "Complex DS"), ("LRU Cache revisit (#146)", "Med", "HashMap+DLL")],
+        2: [("Skyline Problem (#218)", "Hard", "Sweep+heap"), ("Trapping Rain Water revisit (#42)", "Hard", "2ptr")],
+        3: [("Word Ladder II (#126)", "Hard", "BFS+backtrack"), ("Longest Valid Parens (#32)", "Hard", "Stack/DP")],
+        4: [("Maximal Rectangle (#85)", "Hard", "Histogram+stack"), ("Largest Rectangle revisit (#84)", "Hard", "Monotonic stack")],
+        5: [("Company-tagged hards", "Hard", "Mixed — 2-3 problems")],
+        6: "Review + spaced repetition",
+        7: "Weekly Challenge",
     }),
-    17: ("Mock Interview Marathon + Final Polish", "Phase 3 — DP & Hard Patterns", {
-        1: "Mock 1: 2 problems (45 min each) — any pattern, timed, explain aloud",
-        2: "Mock 2: 2 problems — focus on weak patterns from state file",
-        3: "Mock 3: 2 hard problems — full interview simulation with edge cases",
-        4: "Mock 4: Company-tagged problems (Google/Amazon/Meta style)",
-        5: "Mock 5: Speed round — 4 mediums in 60 minutes",
-        6: "Mock 6: Full interview day simulation — 2 coding rounds back to back",
-        7: "📖 Final review: walk through entire pattern index from memory",
+    17: ("Mock Interview Marathon", "Phase 3", {
+        1: "Mock 1: 2 problems, 45 min each, any pattern",
+        2: "Mock 2: 2 problems, focus on weak patterns",
+        3: "Mock 3: 2 hard problems, full simulation",
+        4: "Mock 4: Company-tagged (Google/Amazon/Meta)",
+        5: "Mock 5: Speed — 4 mediums in 60 min",
+        6: "Mock 6: Full interview day — 2 rounds back-to-back",
+        7: "Final review: entire pattern index from memory",
     }),
 }
 
-# ============================================================================
-#  MOTIVATIONAL QUOTES
-# ============================================================================
-
 QUOTES = [
-    "The only way to do great work is to love what you do. — Steve Jobs",
-    "It's not that I'm so smart, it's just that I stay with problems longer. — Einstein",
-    "First, solve the problem. Then, write the code. — John Johnson",
     "Consistency beats intensity. Show up every day.",
-    "Every expert was once a beginner. Keep going. 💪",
-    "The best time to plant a tree was 20 years ago. The second best time is now.",
+    "First, solve the problem. Then, write the code.",
+    "Every expert was once a beginner.",
     "Small daily improvements → staggering long-term results.",
-    "You don't have to be great to start, but you have to start to be great.",
     "The pain you feel today will be the strength you feel tomorrow.",
-    "Dream big. Start small. Act now.",
     "Hard choices, easy life. Easy choices, hard life.",
     "Discipline is choosing between what you want now and what you want most.",
-    "Code is like humor. When you have to explain it, it's bad. — Cory House",
     "Strive for progress, not perfection.",
+    "You don't have to be great to start, but you have to start to be great.",
+    "The best time was yesterday. The next best time is now.",
+    "It's not about being the best. It's about being better than yesterday.",
+    "Stay hungry. Stay foolish.",
+    "What you do every day matters more than what you do once in a while.",
+    "Don't count the days. Make the days count.",
 ]
 
 # ============================================================================
-#  DATE & POSITION HELPERS
+#  HELPERS
 # ============================================================================
 
 def today_ist():
-    """Get today's date in IST."""
     return datetime.now(IST).date()
 
-
-def compute_position(start_date, today):
-    """Compute (week, day_in_week, total_days_elapsed)."""
-    delta = (today - start_date).days
+def compute_position(start, today):
+    delta = (today - start).days
     if delta < 0:
         return None, None, delta
-    week = delta // 7 + 1
-    day = delta % 7 + 1
-    return week, day, delta
+    return delta // 7 + 1, delta % 7 + 1, delta
 
-
-def get_sd_today(week, day):
-    """Get System Design content for today."""
-    if not week or week > SD_TOTAL_WEEKS:
-        return None, None, None
-    w = SD_WEEKS.get(week)
-    if not w:
-        return None, None, None
-    title, phase, days = w
-    if day > SD_CONTENT_DAYS:
-        return title, phase, "buffer"
-    content = days.get(day)
-    return title, phase, content
-
-
-def get_dsa_today(week, day):
-    """Get DSA content for today."""
-    if not week or week > DSA_TOTAL_WEEKS:
-        return None, None, None
-    w = DSA_WEEKS.get(week)
-    if not w:
-        return None, None, None
-    title, phase, days = w
-    content = days.get(day)
-    return title, phase, content
-
-
-# ============================================================================
-#  MARKDOWN PARSERS (for CONVERSATION_STATE.md)
-# ============================================================================
-
-def parse_state_table(content):
-    """Parse the Current Position table from CONVERSATION_STATE.md."""
-    state = {}
-    match = re.search(
-        r'## 📍 Current Position\s*\n\s*\|.*\|\s*\n\s*\|[-\s|]+\|\s*\n((?:\|.*\n)*)',
-        content
-    )
-    if match:
-        for line in match.group(1).strip().split('\n'):
-            parts = [p.strip() for p in line.split('|')]
-            parts = [p for p in parts if p]
-            if len(parts) >= 2:
-                key = re.sub(r'\*\*', '', parts[0]).strip()
-                val = re.sub(r'\*\*', '', parts[1]).strip()
-                state[key] = val
-    return state
-
-
-def parse_latest_session(content):
-    """Extract the latest session entry."""
-    pattern = r'### Session #(\d+)\s*—\s*(.+?)\s*—\s*(.+?)\n(.*?)(?=### Session #|\n---|\Z)'
-    sessions = re.findall(pattern, content, re.DOTALL)
-    if not sessions:
-        return None
-    last = sessions[-1]
-    # Extract key info from session content
-    problems = re.findall(r'- (.+?LC #\d+.+?)(?:\n|$)', last[3])
-    return {
-        'number': last[0],
-        'date': last[1].strip(),
-        'topic': last[2].strip(),
-        'problems': problems[:5],  # Limit to 5
-    }
-
-
-def parse_review_due(content, today):
-    """Parse spaced repetition section for due items."""
-    due = []
-    # Look for the "Spaced Repetition — Due Today" or review schedule sections
-    # Parse box sections in review_schedule.md
-    lines = content.split('\n')
-    current_box = ""
-    for line in lines:
-        if 'Box 1' in line and '##' in line:
-            current_box = "Box 1 (Daily)"
-        elif 'Box 2' in line and '##' in line:
-            current_box = "Box 2 (3-Day)"
-        elif 'Box 3' in line and '##' in line:
-            current_box = "Box 3 (Weekly)"
-        elif 'Box 4' in line and '##' in line:
-            current_box = "Box 4 (Bi-Weekly)"
-        elif 'Box 5' in line and '##' in line:
-            current_box = "Box 5 (Monthly)"
-
-        if '|' in line and 'LC #' in line:
-            parts = [p.strip() for p in line.split('|')]
-            parts = [p for p in parts if p]
-            if len(parts) >= 4:
-                problem = parts[0]
-                pattern = parts[1] if len(parts) > 1 else ""
-                # Try to find a date that could be "Next Review"
-                for part in reversed(parts):
-                    date_match = re.search(
-                        r'(June|July|August|September|October)\s+(\d+)', part
-                    )
-                    if date_match:
-                        month_map = {
-                            'June': 6, 'July': 7, 'August': 8,
-                            'September': 9, 'October': 10
-                        }
-                        m = month_map.get(date_match.group(1), 0)
-                        d = int(date_match.group(2))
-                        if m:
-                            try:
-                                review_date = datetime(2026, m, d).date()
-                                if review_date <= today:
-                                    due.append({
-                                        'problem': problem,
-                                        'pattern': pattern,
-                                        'box': current_box,
-                                        'due': review_date.strftime('%b %d'),
-                                        'overdue': review_date < today,
-                                    })
-                            except ValueError:
-                                pass
-                        break
-    return due
-
-
-def read_file_safe(path):
-    """Read a file, return empty string if not found."""
+def read_file(path):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except (FileNotFoundError, PermissionError):
         return ""
 
+# ============================================================================
+#  ADAPTIVE PARSERS — read actual progress from CONVERSATION_STATE.md
+# ============================================================================
+
+def parse_current_position(content):
+    """Extract current position fields as dict."""
+    state = {}
+    m = re.search(r'## 📍 Current Position\s*\n\s*\|.*\|\s*\n\s*\|[-\s|]+\|\s*\n((?:\|.*\n)*)', content)
+    if m:
+        for line in m.group(1).strip().split('\n'):
+            parts = [p.strip() for p in line.split('|') if p.strip()]
+            if len(parts) >= 2:
+                key = re.sub(r'\*\*', '', parts[0]).strip()
+                state[key] = re.sub(r'\*\*', '', parts[1]).strip()
+    return state
+
+
+def parse_next_plan(content):
+    """Extract the Next Session Plan section as clean text lines."""
+    m = re.search(r'## ⏭️ Next Session Plan\s*\n(.*?)(?=\n---|\n## |\Z)', content, re.DOTALL)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    lines = []
+    for line in raw.split('\n'):
+        line = line.strip()
+        if not line or line.startswith('**Focus**') or line.startswith('-'):
+            if line.startswith('- '):
+                lines.append(line)
+            continue
+        if line.startswith('**'):
+            # Header like **Topic**: ... or **Plan**:
+            clean = re.sub(r'\*\*', '', line).strip()
+            if clean.endswith(':'):
+                continue  # skip bare headers like "Plan:"
+            lines.append(clean)
+        elif line.startswith(('1.', '2.', '3.', '4.', '5.')):
+            lines.append(line)
+    return lines if lines else None
+
+
+def parse_latest_session(content):
+    """Extract the most recent session entry."""
+    sessions = re.findall(
+        r'### Session #(\d+)\s*—\s*(.+?)\s*—\s*(.+?)\n(.*?)(?=### Session #|\n---|\Z)',
+        content, re.DOTALL
+    )
+    if not sessions:
+        return None
+    last = sessions[-1]
+    # Pull out problem results
+    results = re.findall(r'- (.+?(?:LC #\d+).+?)(?:\n|$)', last[3])
+    return {
+        'num': last[0],
+        'date': last[1].strip(),
+        'topic': last[2].strip(),
+        'results': [r.strip()[:120] for r in results[:5]],
+    }
+
+
+def parse_spaced_rep_due(content, today):
+    """Find items due today or overdue from review_schedule.md."""
+    due = []
+    current_box = ""
+    for line in content.split('\n'):
+        if '## ' in line and 'Box' in line:
+            bm = re.search(r'Box (\d)', line)
+            current_box = f"Box {bm.group(1)}" if bm else ""
+        if '|' in line and 'LC #' in line:
+            parts = [p.strip() for p in line.split('|') if p.strip()]
+            if len(parts) >= 4:
+                problem = parts[0]
+                pattern = parts[1]
+                # Search for date in last columns
+                for part in reversed(parts):
+                    dm = re.search(r'(June|July|Aug|Sep|Oct)\w*\s+(\d+)', part)
+                    if dm:
+                        month_map = {'Jun': 6, 'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10}
+                        mn = dm.group(1)[:3]
+                        m = month_map.get(mn, 0)
+                        if m:
+                            try:
+                                rd = datetime(2026, m, int(dm.group(2))).date()
+                                if rd <= today:
+                                    due.append((problem, pattern, current_box, rd < today))
+                            except ValueError:
+                                pass
+                        break
+    return due
+
+
+def get_adaptive_plan(state, next_plan, cal_week, cal_day, weeks, total_weeks, content_days):
+    """
+    Returns (week_title, phase, content, status_note).
+    Uses next_plan (from CONVERSATION_STATE) if available, else falls back to calendar.
+    """
+    # If no state data at all, use calendar
+    if not state and not next_plan:
+        return _calendar_lookup(cal_week, cal_day, weeks, total_weeks, content_days)
+
+    # If we have a next plan from CONVERSATION_STATE, use it (adaptive)
+    if next_plan:
+        # Try to determine actual week from state
+        actual_week_str = state.get('Current Week', '')
+        actual_week = None
+        wm = re.search(r'Week (\d+)', actual_week_str)
+        if wm:
+            actual_week = int(wm.group(1))
+
+        w = weeks.get(actual_week or cal_week)
+        title = w[0] if w else f"Week {actual_week or cal_week}"
+        phase = w[1] if w else ""
+
+        # Determine if behind/ahead
+        note = ""
+        if cal_week and actual_week and cal_week <= total_weeks:
+            if actual_week < cal_week:
+                note = f"⚠️ Behind schedule (Week {actual_week} vs expected Week {cal_week})"
+            elif actual_week > cal_week:
+                note = f"🚀 Ahead of schedule"
+
+        return title, phase, next_plan, note
+
+    # State exists but no next plan — use calendar
+    return _calendar_lookup(cal_week, cal_day, weeks, total_weeks, content_days)
+
+
+def _calendar_lookup(week, day, weeks, total_weeks, content_days):
+    if not week or week > total_weeks:
+        return None, None, None, "Plan complete ✅"
+    w = weeks.get(week)
+    if not w:
+        return None, None, None, ""
+    title, phase, days = w
+    if day > content_days:
+        return title, phase, "Rest day — review the week's material", ""
+    content = days.get(day)
+    return title, phase, content, ""
+
 
 # ============================================================================
-#  HTML EMAIL GENERATOR
+#  EMAIL GENERATOR — Clean, concise, no fluff
 # ============================================================================
 
-def generate_email_html(today, sd_week, sd_day, dsa_week, dsa_day,
-                        sd_title, sd_phase, sd_content,
-                        dsa_title, dsa_phase, dsa_content,
-                        sd_state, dsa_state, dsa_last_session,
-                        sd_last_session, due_reviews):
-    """Generate a beautiful dark-themed HTML email."""
+def _esc(s):
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-    date_str = today.strftime('%A, %B %d, %Y')
+def generate_email(today, dsa_data, sd_data, dsa_session, sd_session, due_reviews):
+    """Generate a clean, minimal email."""
 
-    # --- Spaced Repetition Section ---
-    review_html = ""
-    if due_reviews:
-        rows = ""
-        for item in due_reviews:
-            badge = (' <span style="background:#e74c3c;color:#fff;padding:1px 6px;'
-                     'border-radius:3px;font-size:10px;font-weight:600;">OVERDUE</span>'
-                     if item['overdue'] else '')
-            rows += f"""<tr>
-                <td style="padding:8px 12px;border-bottom:1px solid #2d2d44;color:#e0e0e0;font-size:14px;">
-                    {item['problem']}{badge}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #2d2d44;color:#9ca3af;font-size:13px;">
-                    {item['pattern']}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #2d2d44;color:#9ca3af;font-size:13px;">
-                    {item['box']}</td>
-            </tr>"""
-        review_html = f"""
-        <div style="margin:20px 0;background:linear-gradient(135deg,#1a1a2e,#1e2340);
-                     border-radius:10px;padding:20px;border:1px solid #2d2d44;">
-            <h3 style="margin:0 0 14px 0;color:#f39c12;font-size:16px;">
-                ⏰ Spaced Repetition Due Today</h3>
-            <table style="width:100%;border-collapse:collapse;">
-                <tr>
-                    <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #3d3d5c;
-                               color:#6b7280;font-size:12px;text-transform:uppercase;">Problem</th>
-                    <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #3d3d5c;
-                               color:#6b7280;font-size:12px;text-transform:uppercase;">Pattern</th>
-                    <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #3d3d5c;
-                               color:#6b7280;font-size:12px;text-transform:uppercase;">Box</th>
-                </tr>
-                {rows}
-            </table>
-        </div>"""
+    date_str = today.strftime('%A, %b %d')
 
-    # --- System Design Section ---
-    sd_html = ""
-    if sd_week and sd_week <= SD_TOTAL_WEEKS:
-        if sd_content == "buffer":
-            inner = """<p style="color:#8b949e;font-size:14px;margin:12px 0;">
-                📚 Buffer Day — Review and consolidate this week's learning.
-                Re-tell stories from the week, update notes, rest your brain.</p>"""
-        elif sd_content is None:
-            inner = '<p style="color:#8b949e;font-size:14px;">No content scheduled.</p>'
-        elif isinstance(sd_content, list):
-            topics = ""
-            for name, story in sd_content:
-                topics += f"""
-                <div style="margin:10px 0;padding:12px;background:#0d1117;border-radius:8px;
-                            border-left:3px solid #58a6ff;">
-                    <strong style="color:#58a6ff;font-size:14px;">{name}</strong><br>
-                    <em style="color:#8b949e;font-size:13px;">"{story}"</em>
-                </div>"""
-            inner = topics
-        else:
-            inner = f'<p style="color:#8b949e;">{sd_content}</p>'
+    # --- Build DSA section ---
+    dsa_week_title, dsa_phase, dsa_content, dsa_note = dsa_data
+    dsa_html = _build_section(
+        "DSA", dsa_week_title, dsa_phase, dsa_content, dsa_note,
+        "#b45309", due_reviews
+    )
 
-        sd_html = f"""
-        <div style="margin:20px 0;background:linear-gradient(135deg,#0d1117,#161b22);
-                     border-radius:10px;padding:20px;border:1px solid #30363d;">
-            <h2 style="margin:0 0 4px 0;color:#58a6ff;font-size:18px;">
-                🏗️ System Design</h2>
-            <p style="margin:0 0 16px 0;color:#8b949e;font-size:13px;">
-                Week {sd_week} / {SD_TOTAL_WEEKS} &nbsp;•&nbsp; Day {sd_day}
-                &nbsp;•&nbsp; {sd_title or ''}</p>
-            <p style="margin:0 0 8px 0;color:#6b7280;font-size:11px;
-                       text-transform:uppercase;letter-spacing:1px;">
-                {sd_phase or ''}</p>
-            {inner}
-        </div>"""
-    elif sd_week and sd_week > SD_TOTAL_WEEKS:
-        sd_html = """
-        <div style="margin:20px 0;background:#0d1117;border-radius:10px;padding:20px;
-                     border:1px solid #30363d;">
-            <h2 style="margin:0;color:#58a6ff;">🏗️ System Design — ✅ Plan Complete!</h2>
-            <p style="color:#8b949e;">You've completed the 16-week system design plan. 🎉</p>
-        </div>"""
+    # --- Build SD section ---
+    sd_week_title, sd_phase, sd_content, sd_note = sd_data
+    sd_html = _build_section(
+        "System Design", sd_week_title, sd_phase, sd_content, sd_note,
+        "#1d4ed8", None
+    )
 
-    # --- DSA Section ---
-    dsa_html = ""
-    if dsa_week and dsa_week <= DSA_TOTAL_WEEKS:
-        if isinstance(dsa_content, str):
-            # Special day (review, challenge, mock, checkpoint)
-            inner = f"""<div style="margin:10px 0;padding:14px;background:#0d1117;
-                                    border-radius:8px;border-left:3px solid #f39c12;">
-                <strong style="color:#f39c12;font-size:14px;">{dsa_content}</strong>
-            </div>"""
-        elif isinstance(dsa_content, list):
-            problems = ""
-            for item in dsa_content:
-                if len(item) >= 3:
-                    name, diff, pattern = item[0], item[1], item[2]
-                    dc = {'Easy': '#10b981', 'Medium': '#f59e0b',
-                          'Hard': '#ef4444', '': '#6b7280'}.get(diff, '#6b7280')
-                    diff_badge = (f'<span style="color:{dc};font-size:11px;font-weight:600;'
-                                  f'margin-left:8px;">{diff}</span>' if diff else '')
-                    pat = (f'<br><span style="color:#6b7280;font-size:12px;">'
-                           f'Pattern: {pattern}</span>' if pattern else '')
-                    problems += f"""
-                    <div style="margin:8px 0;padding:12px;background:#0d1117;
-                                border-radius:8px;border-left:3px solid {dc};">
-                        <strong style="color:#e5e7eb;font-size:14px;">{name}</strong>
-                        {diff_badge}{pat}
-                    </div>"""
-                else:
-                    problems += f"""
-                    <div style="margin:8px 0;padding:12px;background:#0d1117;
-                                border-radius:8px;border-left:3px solid #6b7280;">
-                        <span style="color:#e5e7eb;font-size:14px;">{item[0]}</span>
-                    </div>"""
-            inner = problems
-        else:
-            inner = '<p style="color:#8b949e;">No content scheduled.</p>'
+    # --- Yesterday's progress ---
+    yesterday_html = _build_yesterday(dsa_session, sd_session)
 
-        dsa_html = f"""
-        <div style="margin:20px 0;background:linear-gradient(135deg,#0d1117,#1a1520);
-                     border-radius:10px;padding:20px;border:1px solid #30363d;">
-            <h2 style="margin:0 0 4px 0;color:#f39c12;font-size:18px;">💻 DSA</h2>
-            <p style="margin:0 0 16px 0;color:#8b949e;font-size:13px;">
-                Week {dsa_week} / {DSA_TOTAL_WEEKS} &nbsp;•&nbsp; Day {dsa_day}
-                &nbsp;•&nbsp; {dsa_title or ''}</p>
-            <p style="margin:0 0 8px 0;color:#6b7280;font-size:11px;
-                       text-transform:uppercase;letter-spacing:1px;">
-                {dsa_phase or ''}</p>
-            {inner}
-        </div>"""
-    elif dsa_week and dsa_week > DSA_TOTAL_WEEKS:
-        dsa_html = """
-        <div style="margin:20px 0;background:#0d1117;border-radius:10px;padding:20px;
-                     border:1px solid #30363d;">
-            <h2 style="margin:0;color:#f39c12;">💻 DSA — ✅ Plan Complete!</h2>
-            <p style="color:#8b949e;">You've completed the 17-week DSA plan. 🎉</p>
-        </div>"""
-
-    # --- Latest Progress Section ---
-    progress_parts = []
-    if dsa_last_session:
-        problems_str = ""
-        if dsa_last_session.get('problems'):
-            problems_str = "<br>".join(
-                f'<span style="color:#d1d5db;font-size:12px;">• {p[:80]}</span>'
-                for p in dsa_last_session['problems'][:3]
-            )
-        progress_parts.append(f"""
-        <div style="margin:8px 0;padding:12px;background:#0d1117;border-radius:8px;">
-            <strong style="color:#f39c12;font-size:13px;">
-                💻 DSA Session #{dsa_last_session['number']}</strong>
-            <span style="color:#6b7280;font-size:12px;"> — {dsa_last_session['date']}</span>
-            <br><span style="color:#9ca3af;font-size:13px;">{dsa_last_session['topic']}</span>
-            {f'<br>{problems_str}' if problems_str else ''}
-        </div>""")
-
-    if sd_last_session:
-        progress_parts.append(f"""
-        <div style="margin:8px 0;padding:12px;background:#0d1117;border-radius:8px;">
-            <strong style="color:#58a6ff;font-size:13px;">
-                🏗️ SD Session #{sd_last_session['number']}</strong>
-            <span style="color:#6b7280;font-size:12px;"> — {sd_last_session['date']}</span>
-            <br><span style="color:#9ca3af;font-size:13px;">{sd_last_session['topic']}</span>
-        </div>""")
-
-    progress_html = ""
-    if progress_parts:
-        progress_html = f"""
-        <div style="margin:20px 0;background:linear-gradient(135deg,#1a1520,#161b22);
-                     border-radius:10px;padding:20px;border:1px solid #30363d;">
-            <h3 style="margin:0 0 12px 0;color:#a78bfa;font-size:16px;">
-                📋 Latest Progress</h3>
-            {"".join(progress_parts)}
-        </div>"""
-
-    # --- Overall Stats ---
-    sd_sessions = sd_state.get('Session Count', '0')
-    sd_systems = sd_state.get('Systems Designed', '0')
-    dsa_sessions = dsa_state.get('Session Count', '0')
-    dsa_problems = dsa_state.get('Total Problems Solved', '0')
-
-    sd_pct = min(100, round(((sd_week or 1) - 1) / SD_TOTAL_WEEKS * 100)) if sd_week else 0
-    dsa_pct = min(100, round(((dsa_week or 1) - 1) / DSA_TOTAL_WEEKS * 100)) if dsa_week else 0
-
-    stats_html = f"""
-    <div style="margin:20px 0;background:linear-gradient(135deg,#161b22,#1a1a2e);
-                 border-radius:10px;padding:20px;border:1px solid #30363d;">
-        <h3 style="margin:0 0 16px 0;color:#a78bfa;font-size:16px;">📊 Overall Progress</h3>
-        <table style="width:100%;border-collapse:collapse;">
-            <tr>
-                <td style="padding:10px 8px;color:#58a6ff;font-weight:700;font-size:14px;width:140px;">
-                    🏗️ System Design</td>
-                <td style="padding:10px 8px;">
-                    <div style="background:#1e1e3a;border-radius:10px;height:18px;overflow:hidden;">
-                        <div style="background:linear-gradient(90deg,#3b82f6,#60a5fa);
-                                    height:100%;width:{sd_pct}%;border-radius:10px;
-                                    min-width:2px;"></div>
-                    </div>
-                </td>
-                <td style="padding:10px 8px;color:#9ca3af;font-size:12px;white-space:nowrap;width:100px;">
-                    W{sd_week or 0}/{SD_TOTAL_WEEKS} • {sd_sessions}s • {sd_systems}sys</td>
-            </tr>
-            <tr>
-                <td style="padding:10px 8px;color:#f39c12;font-weight:700;font-size:14px;">
-                    💻 DSA</td>
-                <td style="padding:10px 8px;">
-                    <div style="background:#1e1e3a;border-radius:10px;height:18px;overflow:hidden;">
-                        <div style="background:linear-gradient(90deg,#f59e0b,#fbbf24);
-                                    height:100%;width:{dsa_pct}%;border-radius:10px;
-                                    min-width:2px;"></div>
-                    </div>
-                </td>
-                <td style="padding:10px 8px;color:#9ca3af;font-size:12px;white-space:nowrap;">
-                    W{dsa_week or 0}/{DSA_TOTAL_WEEKS} • {dsa_sessions}s • {dsa_problems}p</td>
-            </tr>
-        </table>
-    </div>"""
-
-    # --- Motivational Quote ---
+    # --- Quote ---
     qidx = int(hashlib.md5(date_str.encode()).hexdigest(), 16) % len(QUOTES)
-    quote = QUOTES[qidx]
 
-    # --- Full Email ---
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Daily Study Plan — {date_str}</title></head>
-<body style="margin:0;padding:0;background:#0a0a14;
-             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<div style="max-width:620px;margin:0 auto;padding:20px;">
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,
+'Segoe UI',Roboto,sans-serif;color:#1f2937;line-height:1.6;">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px;">
 
-    <!-- Header -->
-    <div style="text-align:center;padding:28px 20px;
-                background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
-                border-radius:14px;margin-bottom:4px;border:1px solid #30363d;">
-        <h1 style="margin:0;color:#f0f0f0;font-size:22px;font-weight:700;letter-spacing:-0.5px;">
-            📅 Daily Study Plan</h1>
-        <p style="margin:10px 0 0 0;color:#8b949e;font-size:15px;">{date_str}</p>
-    </div>
+<h1 style="font-size:20px;font-weight:700;margin:0 0 24px 0;color:#111827;">
+📅 {date_str}</h1>
 
-    {review_html}
-    {sd_html}
-    {dsa_html}
-    {progress_html}
-    {stats_html}
+{dsa_html}
+{sd_html}
+{yesterday_html}
 
-    <!-- Quote -->
-    <div style="margin:20px 0;text-align:center;padding:16px 20px;
-                border-top:1px solid #1e1e3a;">
-        <p style="color:#4b5563;font-style:italic;margin:0;font-size:13px;">💡 {quote}</p>
-    </div>
+<p style="text-align:center;color:#9ca3af;font-size:13px;margin:32px 0 0 0;
+          padding-top:16px;border-top:1px solid #e5e7eb;">
+{_esc(QUOTES[qidx])}</p>
 
-    <!-- Footer -->
-    <div style="text-align:center;padding:8px;color:#374151;font-size:10px;">
-        Auto-generated by Daily Study Planner &nbsp;•&nbsp; GitHub Actions<br>
-        <span style="color:#4b5563;">Data from last git push. Push your progress to keep emails accurate.</span>
-    </div>
-</div>
-</body></html>"""
+</div></body></html>"""
 
     return html
 
 
+def _build_section(label, week_title, phase, content, note, accent, due_reviews=None):
+    """Build one plan section (DSA or SD)."""
+    if not week_title and not content:
+        return f"""<div style="margin:0 0 28px 0;">
+<h2 style="font-size:16px;color:{accent};margin:0 0 8px 0;">{label}</h2>
+<p style="color:#6b7280;margin:0;">Plan complete ✅</p>
+</div>"""
+
+    # Header
+    header = f"{week_title}"
+    if phase:
+        header += f" · {phase}"
+
+    # Status note (behind/ahead)
+    note_html = ""
+    if note:
+        nc = "#dc2626" if "Behind" in note else "#059669"
+        note_html = f'<p style="color:{nc};font-size:13px;font-weight:600;margin:4px 0 0 0;">{_esc(note)}</p>'
+
+    # Spaced rep due (only for DSA)
+    rep_html = ""
+    if due_reviews:
+        items = []
+        for prob, pat, box, overdue in due_reviews:
+            tag = " (OVERDUE)" if overdue else ""
+            items.append(f"Recall: {_esc(prob)}{tag}")
+        rep_html = "".join(f'<li style="color:#92400e;font-size:14px;margin:2px 0;">⏰ {i}</li>' for i in items)
+
+    # Content
+    content_html = ""
+    if isinstance(content, str):
+        # Simple string (review day, challenge day, rest day)
+        content_html = f'<p style="color:#4b5563;font-size:14px;margin:8px 0;">{_esc(content)}</p>'
+    elif isinstance(content, list):
+        items_html = ""
+        for item in content:
+            if isinstance(item, tuple):
+                if len(item) == 3:
+                    # DSA problem: (name, difficulty, pattern)
+                    name, diff, pat = item
+                    dc = {"Easy":"#059669","Med":"#d97706","Hard":"#dc2626","":"#6b7280"}.get(diff,"#6b7280")
+                    items_html += (f'<li style="font-size:14px;margin:4px 0;color:#1f2937;">'
+                                   f'{_esc(name)} '
+                                   f'<span style="color:{dc};font-size:12px;font-weight:600;">{diff}</span>'
+                                   f'<br><span style="color:#6b7280;font-size:12px;">{_esc(pat)}</span></li>')
+                elif len(item) == 2:
+                    # SD topic: (name, story)
+                    name, story = item
+                    items_html += (f'<li style="font-size:14px;margin:4px 0;color:#1f2937;">'
+                                   f'{_esc(name)}'
+                                   f'<br><span style="color:#6b7280;font-size:12px;font-style:italic;">'
+                                   f'"{_esc(story)}"</span></li>')
+            elif isinstance(item, str):
+                # Line from Next Session Plan (adaptive)
+                clean = re.sub(r'\*\*', '', item)
+                clean = re.sub(r'^[\d]+\.\s*', '', clean)
+                clean = re.sub(r'^[⏰🧠🆕📖🔗]\s*', '', clean)
+                clean = re.sub(r'^- ', '', clean)
+                items_html += f'<li style="font-size:14px;margin:3px 0;color:#374151;">{_esc(clean.strip())}</li>'
+        content_html = f'<ul style="margin:8px 0;padding-left:20px;list-style:disc;">{rep_html}{items_html}</ul>'
+    elif content is None:
+        content_html = '<p style="color:#6b7280;font-size:14px;">No content scheduled.</p>'
+
+    if rep_html and not content_html.startswith('<ul'):
+        content_html = f'<ul style="margin:8px 0;padding-left:20px;list-style:disc;">{rep_html}</ul>{content_html}'
+
+    return f"""<div style="margin:0 0 28px 0;">
+<h2 style="font-size:16px;color:{accent};margin:0 0 2px 0;">{label}</h2>
+<p style="color:#6b7280;font-size:13px;margin:0;">{_esc(header)}</p>
+{note_html}
+{content_html}
+</div>"""
+
+
+def _build_yesterday(dsa_session, sd_session):
+    """Build yesterday's progress section."""
+    if not dsa_session and not sd_session:
+        return """<div style="margin:0 0 28px 0;padding-top:20px;border-top:1px solid #e5e7eb;">
+<h2 style="font-size:16px;color:#4b5563;margin:0 0 8px 0;">Yesterday</h2>
+<p style="color:#9ca3af;font-size:14px;margin:0;">No sessions recorded yet.</p>
+</div>"""
+
+    parts = []
+
+    if dsa_session:
+        s = dsa_session
+        summary = f"<strong>DSA Session #{s['num']}</strong> — {_esc(s['date'])} — {_esc(s['topic'])}"
+        if s['results']:
+            results = "".join(f"<li style='font-size:13px;color:#4b5563;margin:2px 0;'>{_esc(r)}</li>"
+                              for r in s['results'])
+            summary += f"<ul style='margin:4px 0 0 0;padding-left:18px;'>{results}</ul>"
+        parts.append(summary)
+
+    if sd_session:
+        s = sd_session
+        parts.append(f"<strong>System Design Session #{s['num']}</strong> — {_esc(s['date'])} — {_esc(s['topic'])}")
+
+    if not sd_session:
+        parts.append("<span style='color:#9ca3af;'>System Design: No session yet</span>")
+    if not dsa_session:
+        parts.append("<span style='color:#9ca3af;'>DSA: No session yet</span>")
+
+    inner = "".join(f"<p style='font-size:14px;margin:6px 0;color:#1f2937;'>{p}</p>" for p in parts)
+
+    return f"""<div style="margin:0 0 28px 0;padding-top:20px;border-top:1px solid #e5e7eb;">
+<h2 style="font-size:16px;color:#4b5563;margin:0 0 8px 0;">Yesterday</h2>
+{inner}
+</div>"""
+
+
 # ============================================================================
-#  EMAIL SENDER
+#  SENDER
 # ============================================================================
 
-def send_email(subject, html_body):
-    """Send HTML email via Gmail SMTP."""
+def send_email(subject, html):
     if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
-        log.error("❌ GMAIL_ADDRESS and GMAIL_APP_PASSWORD env vars required")
+        log.error("GMAIL_ADDRESS and GMAIL_APP_PASSWORD required")
         sys.exit(1)
-
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
-    msg['From'] = f"Study Planner <{GMAIL_ADDRESS}>"
+    msg['From'] = f"Study Plan <{GMAIL_ADDRESS}>"
     msg['To'] = GMAIL_ADDRESS
-    msg.attach(MIMEText(html_body, 'html'))
-
+    msg.attach(MIMEText(html, 'html'))
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, GMAIL_ADDRESS, msg.as_string())
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            s.sendmail(GMAIL_ADDRESS, GMAIL_ADDRESS, msg.as_string())
         log.info(f"✅ Email sent to {GMAIL_ADDRESS}")
-    except smtplib.SMTPAuthenticationError:
-        log.error("❌ Gmail authentication failed. Check GMAIL_ADDRESS and GMAIL_APP_PASSWORD.")
-        sys.exit(1)
     except Exception as e:
-        log.error(f"❌ Failed to send email: {e}")
+        log.error(f"❌ Failed: {e}")
         sys.exit(1)
 
 
@@ -892,61 +692,49 @@ def send_email(subject, html_body):
 
 def main():
     dry_run = "--dry-run" in sys.argv
-
     today = today_ist()
-    log.info(f"📅 Generating daily plan for {today.strftime('%A, %B %d, %Y')}")
+    log.info(f"📅 {today.strftime('%A, %B %d, %Y')}")
 
-    # Compute schedule positions
+    # Calendar positions
     sd_week, sd_day, _ = compute_position(SD_START, today)
     dsa_week, dsa_day, _ = compute_position(DSA_START, today)
-    log.info(f"🏗️  System Design: Week {sd_week}, Day {sd_day}")
-    log.info(f"💻 DSA:            Week {dsa_week}, Day {dsa_day}")
 
-    # Get today's content
-    sd_title, sd_phase, sd_content = get_sd_today(sd_week, sd_day)
-    dsa_title, dsa_phase, dsa_content = get_dsa_today(dsa_week, dsa_day)
+    # Read state files
+    sd_state_raw = read_file(os.path.join(SD_REPO, "CONVERSATION_STATE.md"))
+    dsa_state_raw = read_file(os.path.join(DSA_REPO, "CONVERSATION_STATE.md"))
 
-    # Parse conversation states
-    sd_state_content = read_file_safe(os.path.join(SD_REPO, "CONVERSATION_STATE.md"))
-    dsa_state_content = read_file_safe(os.path.join(DSA_REPO, "CONVERSATION_STATE.md"))
+    sd_state = parse_current_position(sd_state_raw)
+    dsa_state = parse_current_position(dsa_state_raw)
 
-    sd_state = parse_state_table(sd_state_content)
-    dsa_state = parse_state_table(dsa_state_content)
+    sd_next = parse_next_plan(sd_state_raw)
+    dsa_next = parse_next_plan(dsa_state_raw)
 
-    sd_last = parse_latest_session(sd_state_content)
-    dsa_last = parse_latest_session(dsa_state_content)
+    # Adaptive plans
+    sd_data = get_adaptive_plan(sd_state, sd_next, sd_week, sd_day, SD_WEEKS, 16, 5)
+    dsa_data = get_adaptive_plan(dsa_state, dsa_next, dsa_week, dsa_day, DSA_WEEKS, 17, 7)
 
-    # Parse spaced repetition due items
-    review_content = read_file_safe(
-        os.path.join(DSA_REPO, "spaced_repetition", "review_schedule.md")
-    )
-    due_reviews = parse_review_due(review_content, today)
+    # Latest sessions (yesterday's progress)
+    sd_session = parse_latest_session(sd_state_raw)
+    dsa_session = parse_latest_session(dsa_state_raw)
 
-    # Generate email
-    html = generate_email_html(
-        today, sd_week, sd_day, dsa_week, dsa_day,
-        sd_title, sd_phase, sd_content,
-        dsa_title, dsa_phase, dsa_content,
-        sd_state, dsa_state, dsa_last, sd_last, due_reviews,
-    )
+    # Spaced rep
+    review_raw = read_file(os.path.join(DSA_REPO, "spaced_repetition", "review_schedule.md"))
+    due = parse_spaced_rep_due(review_raw, today)
 
-    # Build subject line
-    sd_tag = f"SD W{sd_week}D{sd_day}" if sd_week and sd_week <= SD_TOTAL_WEEKS else "SD ✅"
-    dsa_tag = f"DSA W{dsa_week}D{dsa_day}" if dsa_week and dsa_week <= DSA_TOTAL_WEEKS else "DSA ✅"
-    subject = f"📅 {today.strftime('%b %d')} | {sd_tag} | {dsa_tag} | Daily Study Plan"
+    # Generate
+    html = generate_email(today, dsa_data, sd_data, dsa_session, sd_session, due)
+
+    subject = f"📅 {today.strftime('%b %d')} — Study Plan"
 
     if dry_run:
-        log.info("🔍 Dry run — printing HTML to stdout:\n")
-        print(html)
-        # Also save to file for preview
-        preview_path = os.path.join(SD_REPO, "daily_planner", "preview.html")
-        with open(preview_path, 'w') as f:
+        preview = os.path.join(SD_REPO, "daily_planner", "preview.html")
+        with open(preview, 'w') as f:
             f.write(html)
-        log.info(f"\n📄 Preview saved to {preview_path}")
+        log.info(f"Preview: {preview}")
     else:
         send_email(subject, html)
 
-    log.info("✅ Done!")
+    log.info("Done")
 
 
 if __name__ == "__main__":
