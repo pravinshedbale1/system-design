@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
-SD_START = datetime(2026, 6, 10, tzinfo=IST).date()
+SD_START = datetime(2026, 6, 15, tzinfo=IST).date()
 DSA_START = datetime(2026, 6, 10, tzinfo=IST).date()
 
 SD_REPO = os.environ.get("SD_REPO_PATH", ".")

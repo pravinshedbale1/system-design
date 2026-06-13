@@ -1,6 +1,6 @@
 # 🏗️ SYSTEM DESIGN MASTERY — 16-WEEK MASTER PLAN (112 DAYS)
 
-> **June 10, 2026 → September 29, 2026** | 112 Days | ~40+ Systems Designed
+> **June 15, 2026 → October 4, 2026** | 112 Days | ~40+ Systems Designed
 > **Goal**: Walk into any system design interview — Google, Amazon, Meta, Netflix, Uber — and design any system from scratch with confidence, depth, and storytelling that makes interviewers want to hire you on the spot.
 >
 > ⚠️ _This is NOT a "memorize 20 designs" plan. This is a "understand 8 pillars so deeply that you can design ANYTHING" plan._
@@ -157,7 +157,7 @@
 
 ---
 
-## Week 1: The Internet & How Things Talk (June 10 – June 16)
+## Week 1: The Internet & How Things Talk (June 15 – June 21)
 
 ### The Story Arc
 > *"You type google.com and press Enter. What happens next is one of the most beautiful
@@ -186,7 +186,7 @@
 
 ---
 
-## Week 2: Data — Where Things Live & How They Scale (June 17 – June 23)
+## Week 2: Data — Where Things Live & How They Scale (June 22 – June 28)
 
 ### The Story Arc
 > *"Every system is just 'take data in, store it, give it back.' The question is:
@@ -217,7 +217,7 @@
 
 ---
 
-## Week 3: Caching, Queues & The Art of Not Doing Work (June 24 – June 30)
+## Week 3: Caching, Queues & The Art of Not Doing Work (June 29 – July 5)
 
 ### The Story Arc
 > *"The fastest way to do something is to not do it at all. That's what caching is.
@@ -246,7 +246,7 @@
 
 ---
 
-## Week 4: Consistency, Reliability & The Real World (July 1 – July 7)
+## Week 4: Consistency, Reliability & The Real World (July 6 – July 12)
 
 ### The Story Arc
 > *"Systems don't fail — they partially fail. A server doesn't just 'stop working.'
@@ -286,7 +286,7 @@
 
 ---
 
-## Week 5: Social & Feed Systems (July 8 – July 14)
+## Week 5: Social & Feed Systems (July 13 – July 19)
 
 ### The Story Arc
 > *"You open Instagram. In 0.3 seconds, you see a feed of posts from people you follow —
@@ -310,7 +310,7 @@
 
 ---
 
-## Week 6: Messaging & Real-Time Systems (July 15 – July 21)
+## Week 6: Messaging & Real-Time Systems (July 20 – July 26)
 
 ### The Story Arc
 > *"WhatsApp handles 100 billion messages a day with just 50 engineers.
@@ -334,7 +334,7 @@
 
 ---
 
-## Week 7: Storage & Search Systems (July 22 – July 28)
+## Week 7: Storage & Search Systems (July 27 – August 2)
 
 ### The Story Arc
 > *"Google Search returns results in 0.2 seconds from an index of the ENTIRE internet.
@@ -358,7 +358,7 @@
 
 ---
 
-## Week 8: Video & Streaming Systems (July 29 – August 4)
+## Week 8: Video & Streaming Systems (August 3 – August 9)
 
 ### The Story Arc
 > *"Netflix accounts for 15% of all internet bandwidth. YouTube serves a billion hours of video daily.
@@ -382,7 +382,7 @@
 
 ---
 
-## Week 9: E-Commerce & Transactional Systems (August 5 – August 11)
+## Week 9: E-Commerce & Transactional Systems (August 10 – August 16)
 
 ### The Story Arc
 > *"On Prime Day, Amazon processes 100,000 orders per SECOND. Every order must be consistent —
@@ -406,7 +406,7 @@
 
 ---
 
-## Week 10: Location & Ride-Sharing Systems (August 12 – August 18)
+## Week 10: Location & Ride-Sharing Systems (August 17 – August 23)
 
 ### The Story Arc
 > *"You tap 'Request Ride' on Uber. In 3 seconds, a driver 2 minutes away accepts.
@@ -442,7 +442,7 @@
 
 ---
 
-## Week 11: Infrastructure & Platform Systems (August 19 – August 25)
+## Week 11: Infrastructure & Platform Systems (August 24 – August 30)
 
 | Day | System | The Story |
 |-----|--------|-----------|
@@ -455,7 +455,7 @@
 
 ---
 
-## Week 12: Data Pipeline & Analytics Systems (August 26 – September 1)
+## Week 12: Data Pipeline & Analytics Systems (August 31 – September 6)
 
 | Day | System | The Story |
 |-----|--------|-----------|
@@ -468,7 +468,7 @@
 
 ---
 
-## Week 13: Unique/Tricky Systems (September 2 – September 8)
+## Week 13: Unique/Tricky Systems (September 7 – September 13)
 
 | Day | System | The Story |
 |-----|--------|-----------|
@@ -481,7 +481,7 @@
 
 ---
 
-## Week 14: Security, Auth & API Systems (September 9 – September 15)
+## Week 14: Security, Auth & API Systems (September 14 – September 20)
 
 | Day | System | The Story |
 |-----|--------|-----------|
@@ -494,7 +494,7 @@
 
 ---
 
-## Week 15: Mock Interview Marathon (September 16 – September 22)
+## Week 15: Mock Interview Marathon (September 21 – September 27)
 
 | Day | Focus |
 |-----|-------|
@@ -506,7 +506,7 @@
 
 ---
 
-## Week 16: Final Polish & Interview Readiness (September 23 – September 29)
+## Week 16: Final Polish & Interview Readiness (September 28 – October 4)
 
 | Day | Focus |
 |-----|-------|
@@ -522,14 +522,14 @@
 
 | Date | Milestone | Success Criteria |
 |------|-----------|-----------------|
-| Jun 16 (W1) | Networking & APIs solid | Can narrate DNS→HTTP→Server flow, design a URL shortener |
-| Jun 23 (W2) | Data layer mastered | Can explain SQL vs NoSQL, sharding, replication as stories |
-| Jun 30 (W3) | Caching & queues intuitive | Can explain when/why to add cache, design rate limiter |
-| Jul 7 (W4) | **Phase 1 complete** | All building blocks as stories, back-of-envelope fluent |
-| Jul 28 (W7) | Core systems designed | Can design Twitter, WhatsApp, Dropbox from scratch |
-| Aug 18 (W10) | **Phase 2 complete** | 12+ systems designed, can handle any classic question |
-| Sep 8 (W13) | Advanced systems done | Can handle curveballs (Google Docs, Ticketmaster) |
-| **Sep 29 (W16)** | **🎯 INTERVIEW READY** | **Design any system with stories, depth, and confidence** |
+| Jun 21 (W1) | Networking & APIs solid | Can narrate DNS→HTTP→Server flow, design a URL shortener |
+| Jun 28 (W2) | Data layer mastered | Can explain SQL vs NoSQL, sharding, replication as stories |
+| Jul 5 (W3) | Caching & queues intuitive | Can explain when/why to add cache, design rate limiter |
+| Jul 12 (W4) | **Phase 1 complete** | All building blocks as stories, back-of-envelope fluent |
+| Aug 2 (W7) | Core systems designed | Can design Twitter, WhatsApp, Dropbox from scratch |
+| Aug 23 (W10) | **Phase 2 complete** | 12+ systems designed, can handle any classic question |
+| Sep 13 (W13) | Advanced systems done | Can handle curveballs (Google Docs, Ticketmaster) |
+| **Oct 4 (W16)** | **🎯 INTERVIEW READY** | **Design any system with stories, depth, and confidence** |
 
 ---
 
